@@ -1,0 +1,235 @@
+<html>
+<head>
+  <!-- 
+    Author: Mauricio van der Maesen de Sombreff 
+    email: mauricio@li-ma.nl
+    date: 2022/10/19
+  -->
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link href="video-js.css" rel="stylesheet" />
+  <link href="main.css" rel="stylesheet" />
+
+  <link rel="stylesheet" href="jquery-ui.css">
+  <script src="jquery-3.6.0.js"></script>
+  <script src="jquery-ui.js"></script>
+
+</head>
+
+<body>
+
+<div id="container">
+
+  <video
+    id="my-video"
+    class="video-js"
+    loop
+    muted
+    autoplay
+    poster="media/poster.jpg"
+    data-setup="{}"
+    responsive="false"
+    preferFullWindow="false"
+    fullscreen="{options: {navigationUI: 'hide'}"
+    >
+
+    <source src="media/sample.mp4" type="video/mp4" />
+  </video>
+
+  <div id="frame" class="ui-widget-content">
+
+    <div class="grid grid1"></div>
+
+    <div class="grid grid2"></div>    
+
+  </div>
+
+</div>
+
+
+<button onclick="setAspectRatio('original')">Original</button>
+<button onclick="setAspectRatio(1/1)">1:1</button>
+<button onclick="setAspectRatio(16/9)">16:9</button>
+<button onclick="setAspectRatio(4/3)">4:3</button>
+<button onclick="setAspectRatio('free')">free</button>
+<button onclick="setAspectRatio(1920/1080)">social</button>
+<button onclick="setAspectRatio(1080/1920)">story</button>
+
+<div id="data"></div>
+<code id="command"></code>
+
+
+  <script src="video.min.js"></script>
+
+  <script>
+
+  const player = videojs('my-video');
+
+  let ivw;
+  let ivh;
+  let icw;
+  let ich;
+  let videoLeft;
+  let videoTop;
+  let showBorder = true;
+  let frame = {
+      position: {
+        left: 0, 
+        top: 0
+      },
+      size: {
+        width: 0, 
+        height: 0
+      },
+    };
+;
+
+  const tell = () => {
+      let videoPos = $('#my-video').position();
+      let framePos = $('#frame').position();
+
+      frame.position = framePos; //ui.offset;
+      frame.position.left -= parseInt(videoPos.left);
+      frame.position.top -= parseInt(videoPos.top);
+
+      frame.size.width = parseInt($('#frame').css('width'))+2;
+      frame.size.height = parseInt($('#frame').css('height'))+2;
+
+      // frame.size.width = parseInt(frame.size.width);
+      // frame.size.height = parseInt(frame.size.height);
+
+      $('#data').html(JSON.stringify(Object.assign(frame, 
+        {
+          original:{
+            width: ivw,
+            height: ivh
+          },
+          player: {
+            width: icw,
+            height: ich
+          }
+        }
+      )));      
+
+      // generate fFMPEG command fo scale and crop the video
+      $('#command').html("ffmpeg -t 30 -ss 0 -i " + 
+        player.src() + 
+        " -vf \"scale=...,crop:...,pad=...\"" +  
+        player.src() + ".resized.mp4");
+  };
+
+  player.on('playing', ()=>{
+    player.fill(true);
+
+    ivw = player.videoWidth();
+    ivh = player.videoHeight();
+    icw = player.currentWidth();
+    ich = ivh*icw/ivw;
+
+    videoLeft = icw*.25;
+    videoTop = ich*.75;
+    
+    $("#container").width(1.5*icw);
+    $("#container").height(2.5*ich);
+
+    $("#frame").width(icw-2);
+    $("#frame").height(ich-2);
+    $("#frame").css('left', videoLeft + $("#container").offset().left+1);
+    $("#frame").css('top', videoTop + $("#container").offset().top+1);
+
+    $("#my-video").width(icw);
+    $("#my-video").height(ich);
+    $("#my-video").css('left', videoLeft);
+    $("#my-video").css('top', videoTop);
+
+    $( "#frame" ).resizable({
+      containment: "#container",
+      aspectRatio: ivw/ivh,
+    });
+    $( "#frame" ).draggable({
+        containment: "#container",
+    });
+    $( "#frame" ).on("resize", function(event, ui){
+      tell();
+    });
+    $( "#frame" ).on("drag", function(event, ui){
+      tell();
+    });
+
+    tell();
+  });
+
+  const setAspectRatio = (aspectRatio)=> {
+    const w = Math.round($( "#frame" ).width());
+    const h = Math.round($( "#frame" ).height());
+    switch(aspectRatio){
+      case 'original':
+        $( "#frame" ).resizable({
+          containment: "#container",
+          aspectRatio:  player.videoWidth()/player.videoHeight(),
+        });
+        break;
+      case 'free':
+        $( "#frame" ).resizable({
+          containment: "#container",
+          aspectRatio: false,
+        });
+        break;
+      default:      
+        $( "#frame" ).resizable({
+          containment: "#container",
+          aspectRatio,
+        });
+    }
+  }
+
+  $('body').on('keydown', handleKeys);
+
+  function handleKeys(e) {
+    let position, 
+        draggable = $('#frame'),
+        container = $('#container'),
+        distance = 1; // Distance in pixels the draggable should be moved
+
+    position = draggable.position();
+
+    // Reposition if one of the directional keys is pressed
+    switch (e.keyCode) {
+        case 37: position.left -= distance; break; // Left
+        case 38: position.top  -= distance; break; // Up
+        case 39: position.left += distance; break; // Right
+        case 40: position.top  += distance; break; // Down
+        case 84: //t (toggle borders)
+          if(showBorder){
+            $('#frame').css('border', '1px solid white');
+            $('video').css('border', '1px solid black');
+            $('.grid').hide();
+            showBorder = false;
+          }
+          else{
+            $('#frame').css('border', '1px solid yellow');            
+            $('video').css('border', '1px solid red');
+            $('.grid').show();
+            showBorder = true;
+          }
+          break;
+        default: 
+        console.log(e.keyCode);
+        return true; // Exit and bubble
+    }
+
+    // Keep draggable within container
+    if (position.left >= 0 && position.top >= 0 &&
+        position.left + draggable.width() <= container.width() &&
+        position.top + draggable.height() <= container.height()) {
+        draggable.css(position);
+    }
+    tell();
+
+    // Don't scroll page
+    e.preventDefault();
+  }
+  </script>
+
+</body>
+</html>
